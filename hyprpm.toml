@@ -1,11 +1,11 @@
 [repository]
-name = "syspower"
+name = "sys* plugins for hyprland"
 authors = ["System64fumo"]
 commit_pins = [
     ["4520b30d498daca8079365bdb909a8dea38e8d55", "db38095a3c21304649879bf79cf5255f936d237d"],
 ]
 
-[plugin-name]
+[syspower]
 description = "Basic power menu and shutdown screen"
 authors = ["System64fumo"]
 output = "libsyspower.so"
