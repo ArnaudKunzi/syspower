@@ -10,5 +10,5 @@ description = "Basic power menu and shutdown screen"
 authors = ["System64fumo"]
 output = "libsyspower.so"
 build = [
-    "make all"
+    "make all && sudo make install"
 ]
