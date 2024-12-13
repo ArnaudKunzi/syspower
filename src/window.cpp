@@ -1,14 +1,13 @@
 #include "window.hpp"
 #include "functions.hpp"
-#include "config.hpp"
-#include "css.hpp"
 
+#include <gtk4-layer-shell.h>
+#include <gtkmm/cssprovider.h>
 #include <glibmm/main.h>
 #include <filesystem>
-#include <gtk4-layer-shell.h>
 #include <thread>
 
-syspower::syspower(const config_power &cfg) {
+syspower::syspower(const config_power& cfg) : config_main(cfg) {
 	config_main = cfg;
 
 	// Layer shell stuff
@@ -96,18 +95,24 @@ syspower::syspower(const config_power &cfg) {
 	add_button("Shutdown");
 	add_button("Reboot");
 	add_button("Logout");
+	add_button("Suspend");
 	add_button("Cancel");
 
-	// Load custom css
-	std::string style_path;
-	if (std::filesystem::exists(std::string(getenv("HOME")) + "/.config/sys64/power/style.css"))
-		style_path = std::string(getenv("HOME")) + "/.config/sys64/power/style.css";
-	else if (std::filesystem::exists("/usr/share/sys64/power/style.css"))
-		style_path = "/usr/share/sys64/power/style.css";
-	else
-		style_path = "/usr/local/share/sys64/power/style.css";
+	const std::string& style_path = "/usr/share/sys64/power/style.css";
+	const std::string& style_path_usr = std::string(getenv("HOME")) + "/.config/sys64/power/style.css";
 
-	css_loader loader(style_path, this);
+	// Load base style
+	if (std::filesystem::exists(style_path)) {
+		auto css = Gtk::CssProvider::create();
+		css->load_from_path(style_path);
+		get_style_context()->add_provider_for_display(property_display(), css, GTK_STYLE_PROVIDER_PRIORITY_USER);
+	}
+	// Load user style
+	if (std::filesystem::exists(style_path_usr)) {
+		auto css = Gtk::CssProvider::create();
+		css->load_from_path(style_path_usr);
+		get_style_context()->add_provider_for_display(property_display(), css, GTK_STYLE_PROVIDER_PRIORITY_USER);
+	}
 }
 
 void syspower::show_other_windows() {
@@ -186,11 +191,11 @@ void syspower::action_thread() {
 
 	// Run action
 	label_status.set_label(button_text);
-	int ret = system(command);
+	int ret = system(command.c_str());
 	(void)ret; // Unused variable
 }
 
-void syspower::add_button(const std::string &label) {
+void syspower::add_button(const std::string& label) {
 	Gtk::Button *button = Gtk::make_managed<Gtk::Button>(label);
 	std::string lowecase = label;
 	for (char& c : lowecase)
@@ -200,42 +205,41 @@ void syspower::add_button(const std::string &label) {
 	button->get_style_context()->add_class("button_" + lowecase);
 	box_buttons.append(*button);
 	button->signal_clicked().connect([this, lowecase]() {
-		on_button_clicked(lowecase.c_str()[0]);
+		on_button_clicked(lowecase);
 	});
 }
 
-void syspower::on_button_clicked(const char &button) {
-	// Figure out what we're doing
-	if (button == 's') {
-		if (access("/bin/systemctl", F_OK) != -1)
-			// Systemd-logind
-			strcpy(command, "systemctl poweroff");
-		else
-			// Elogind
-			strcpy(command, "loginctl poweroff");
+void syspower::on_button_clicked(const std::string& button) {
+	std::string cmd = "systemctl";
+	if (!systemd(cmd))
+		cmd = "loginctl";
 
+	command += cmd;
+
+	// Figure out what we're doing
+	if (button == "shutdown") {
+		command +=  " poweroff";
 		button_text = "Shutting down...";
 	}
-	else if (button == 'r') {
-		if (access("/bin/systemctl", F_OK) != -1)
-			// Systemd-logind
-			strcpy(command, "systemctl reboot");
-		else
-			// Elogind
-			strcpy(command, "loginctl reboot");
-
+	else if (button == "reboot") {
+		command += " reboot";
 		button_text = "Rebooting...";
 	}
-	else if (button == 'l') {
-		strcpy(command, "loginctl terminate-user $USER");
+	else if (button == "logout") {
+		command += " terminate-user $USER";
 		button_text = "Logging out...";
 	}
-	else if (button == 'c') {
+	else if (button == "suspend") {
+		button_text = "Suspending...";
+		system("systemctl suspend");
 		for (const auto &window : windows)
 			window->close();
-
 		close();
-		return;
+	}
+	else if (button == "cancel") {
+		for (const auto &window : windows)
+			window->close();
+		close();
 	}
 
 	std::thread thread_action(&syspower::action_thread, this);
@@ -252,8 +256,27 @@ bool syspower::on_timer_tick() {
 	return true;
 }
 
+bool syspower::systemd(const std::string& cmd) {
+	std::string path_env_str(std::getenv("PATH"));
+	std::vector<std::string> paths;
+	size_t start = 0, end;
+
+	while ((end = path_env_str.find(':', start)) != std::string::npos) {
+		paths.emplace_back(path_env_str.substr(start, end - start));
+		start = end + 1;
+	}
+	paths.emplace_back(path_env_str.substr(start));
+
+	for (const auto& dir : paths) {
+		if (std::filesystem::exists(std::filesystem::path(dir) / cmd)) {
+			return true;
+		}
+	}
+	return false;
+}
+
 extern "C" {
-	syspower *syspower_create(const config_power &cfg) {
+	syspower* syspower_create(const config_power& cfg) {
 		return new syspower(cfg);
 	}
 }

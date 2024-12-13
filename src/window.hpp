@@ -10,13 +10,13 @@
 
 class syspower : public Gtk::Window {
 	public:
-		syspower(const config_power &cfg);
+		syspower(const config_power&);
 		void show_other_windows();
 
 	private:
 		config_power config_main;
 		double max_slider_value;
-		char command[30] = "";
+		std::string command;
 		Glib::ustring button_text;
 		sigc::connection timer_connection;
 
@@ -31,17 +31,18 @@ class syspower : public Gtk::Window {
 		Gtk::Button button_logout;
 		Gtk::Button button_cancel;
 
-		GdkDisplay *display;
-		GListModel *monitors;
+		GdkDisplay* display;
+		GListModel* monitors;
 		std::vector<std::shared_ptr<Gtk::Window>> windows;
 
 		void action_thread();
-		void add_button(const std::string &label);
-		void on_button_clicked(const char &button);
+		void add_button(const std::string&);
+		void on_button_clicked(const std::string&);
 		bool on_timer_tick();
+		bool systemd(const std::string&);
 };
 
 extern "C" {
-	syspower *syspower_create(const config_power &cfg);
+	syspower *syspower_create(const config_power&);
 }
 
